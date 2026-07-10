@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import SurveyList from './pages/SurveyList';
 import AdminDashboard from './pages/AdminDashboard';
