@@ -1,4 +1,4 @@
-export default function ReviewPage({ questions, answers, onBack, onSubmit }) {
+export default function ReviewPage({ questions, answers, onBack, onSubmit, submitting = false }) {
   const formatDisplayValue = (question, val) => {
     if (!val) return <span className="empty-text">No response</span>;
     if (question.type === 'file') {
@@ -23,8 +23,10 @@ export default function ReviewPage({ questions, answers, onBack, onSubmit }) {
       </div>
 
       <div className="stepper-actions">
-        <button type="button" className="btn-secondary" onClick={onBack}>Back</button>
-        <button type="button" className="btn-success" onClick={onSubmit}>Submit Survey</button>
+        <button type="button" className="btn-secondary" onClick={onBack} disabled={submitting}>Back</button>
+        <button type="button" className="btn-success" onClick={onSubmit} disabled={submitting}>
+          {submitting ? 'Submitting...' : 'Submit Survey'}
+        </button>
       </div>
     </div>
   );

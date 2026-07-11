@@ -2,12 +2,35 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '../utils/api';
 import { xmlToJson } from '../utils/xmlParser';
 import Stepper from '../components/SurveyForm/Stepper';
+import { fetchAuthSession } from 'aws-amplify/auth';
+
+const getSubmissionErrorMessage = async (error) => {
+  const fallback = 'Failed to submit your response. Please check your connection and try again.';
+  const responseBody = error.response?.data;
+
+  if (!responseBody) {
+    return error.code === 'ECONNABORTED'
+      ? 'Submission timed out. Please confirm the API is running, then try again.'
+      : fallback;
+  }
+
+  try {
+    const parsed = await xmlToJson(responseBody);
+    return parsed?.message || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 export default function SurveyList() {
   const [surveys, setSurveys] = useState([]);
   const [selectedSurvey, setSelectedSurvey] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState('idle'); // 'idle', 'success', 'error'
+  const [submitMessage, setSubmitMessage] = useState('');
 
   const fetchActiveSurveys = useCallback(async () => {
     try {
@@ -25,10 +48,19 @@ export default function SurveyList() {
 
   useEffect(() => {
     fetchActiveSurveys();
+    
+    // Check if the user is authenticated to determine if they can submit
+    fetchAuthSession().then(session => {
+      setIsLoggedIn(!!session.tokens?.accessToken);
+    }).catch(() => {
+      setIsLoggedIn(false);
+    });
   }, [fetchActiveSurveys]);
 
   const handleSelectSurvey = async (survey) => {
     setLoading(true);
+    setSubmitStatus('idle');
+    setSubmitMessage('');
     try {
       const res = await api.get(`/surveys/${survey.id}/questions`);
       const data = await xmlToJson(res.data);
@@ -37,7 +69,9 @@ export default function SurveyList() {
         setQuestions(qList);
         setSelectedSurvey(survey);
       } else {
-        alert('This survey has no questions configured yet.');
+        setSubmitStatus('error');
+        setSubmitMessage('This survey has no questions configured yet.');
+        setSelectedSurvey(survey);
       }
     } catch (err) {
       console.error('Error fetching questions:', err);
@@ -47,17 +81,15 @@ export default function SurveyList() {
   };
 
   const handleFormSubmit = async (formAnswers) => {
-    setLoading(true);
+    setSubmitting(true);
     try {
       const formData = new FormData();
       
-      // Match question metadata identifiers to reconstruct explicit schema expectations
       questions.forEach((q) => {
         const val = formAnswers[q.id];
         if (!val) return;
 
         if (q.type === 'file') {
-          // Flatten file streams directly into payload array structures
           Array.from(val).forEach((file) => {
             formData.append('certificates', file);
           });
@@ -69,18 +101,18 @@ export default function SurveyList() {
       });
 
       await api.post(`/surveys/${selectedSurvey.id}/responses`, formData);
-      alert('Survey response submitted successfully!');
-      setSelectedSurvey(null);
-      setQuestions([]);
+      setSubmitStatus('success');
+      setSubmitMessage('Your response has been recorded successfully! Thank you for participating.');
     } catch (err) {
       console.error('Submission failure:', err);
-      alert('Failed to transmit application metrics.');
+      setSubmitStatus('error');
+      setSubmitMessage(await getSubmissionErrorMessage(err));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  if (loading) return <div className="spinner">Loading database configurations...</div>;
+  if (loading) return <div className="spinner">Processing request...</div>;
 
   return (
     <div className="page-wrapper">
@@ -97,9 +129,52 @@ export default function SurveyList() {
         </div>
       ) : (
         <div className="active-form-wrapper">
-          <button onClick={() => setSelectedSurvey(null)} className="btn-link">← Change Selection</button>
-          <h2>{selectedSurvey.name}</h2>
-          <Stepper questions={questions} onSubmit={handleFormSubmit} />
+          <button onClick={() => { setSelectedSurvey(null); setSubmitStatus('idle'); }} className="btn-link">← Return to Surveys</button>
+          
+          {submitStatus === 'success' ? (
+            <div className="review-container" style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+              <h2>Submission Successful!</h2>
+              <p style={{ marginBottom: '24px' }}>{submitMessage}</p>
+              <button onClick={() => { setSelectedSurvey(null); setSubmitStatus('idle'); }} className="btn-primary">
+                Back to Home
+              </button>
+            </div>
+          ) : submitStatus === 'error' && questions.length === 0 ? (
+            <div className="review-container" style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+              <h2>Configuration Error</h2>
+              <p style={{ marginBottom: '24px' }}>{submitMessage}</p>
+              <button onClick={() => { setSelectedSurvey(null); setSubmitStatus('idle'); }} className="btn-primary">
+                Back to Home
+              </button>
+            </div>
+          ) : (
+            <>
+              <h2>{selectedSurvey.name}</h2>
+              
+              {!isLoggedIn && (
+                <div className="status-banner" style={{ marginBottom: '20px' }}>
+                  <strong>Notice:</strong> You are currently viewing as a guest. Please log in to submit your response.
+                </div>
+              )}
+
+              {submitStatus === 'error' && (
+                <div className="error-banner" style={{ marginBottom: '20px' }}>
+                  {submitMessage}
+                </div>
+              )}
+
+              <Stepper 
+                questions={questions} 
+                submitting={submitting}
+                onSubmit={isLoggedIn ? handleFormSubmit : () => {
+                  setSubmitStatus('error');
+                  setSubmitMessage('You must be logged in to submit this survey.');
+                }} 
+              />
+            </>
+          )}
         </div>
       )}
     </div>

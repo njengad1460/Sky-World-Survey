@@ -1,91 +1,121 @@
-// simple-survey-api/src/controllers/responseController.js
 const db = require("../config/db");
 const { s3Client } = require("../config/aws");
 const { PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const jstoxml = require("jstoxml");
 
+const normalizeAnswerValues = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") return value.split(",").map(item => item.trim()).filter(Boolean);
+  if (value === undefined || value === null) return [];
+  return [String(value)];
+};
+
+const isPdfFile = (file) => {
+  return file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf");
+};
+
 exports.submitResponse = async (req, res) => {
+  let connection;
   try {
     const { surveyId } = req.params;
-    const cognitoUserId = req.user?.id || "anonymous_candidate";
-    
-    // Fallback parser handling text fields out of structured multi-part formats
+    const cognitoUserId = req.user.id;
     const payload = req.body || {};
-    const emailAddress = payload.email_address || "";
-    const fullName = payload.full_name || "";
-    const description = payload.description || "";
-    const gender = payload.gender || "";
-    const programmingStack = payload.programming_stack || "";
 
-    // 1. Log response tracking row
-    const [rResult] = await db.execute(
+    const [questions] = await db.execute(
+      "SELECT id, name, question_type, is_required, max_file_size, max_file_size_unit FROM questions WHERE survey_id = ?",
+      [surveyId]
+    );
+
+    if (questions.length === 0) {
+      return res.status(404).header("Content-Type", "application/xml")
+        .send("<error><message>No questions configured for this survey</message></error>");
+    }
+
+    for (const question of questions) {
+      const hasFiles = question.question_type === "file" && req.files?.length > 0;
+      const hasValue = payload[question.name] !== undefined && payload[question.name] !== "";
+
+      if (question.is_required && !hasValue && !hasFiles) {
+        return res.status(400).header("Content-Type", "application/xml")
+          .send(`<error><message>${question.name} is required</message></error>`);
+      }
+    }
+
+    if (req.files?.some(file => !isPdfFile(file))) {
+      return res.status(400).header("Content-Type", "application/xml")
+        .send("<error><message>Only PDF certificate uploads are supported</message></error>");
+    }
+
+    const fileQuestion = questions.find(q => q.question_type === "file");
+    if (req.files?.length > 0 && fileQuestion?.max_file_size && fileQuestion.max_file_size_unit?.toLowerCase() === "mb") {
+      const maxBytes = Number(fileQuestion.max_file_size) * 1024 * 1024;
+      const oversizedFile = req.files.find(file => file.size > maxBytes);
+      if (oversizedFile) {
+        return res.status(400).header("Content-Type", "application/xml")
+          .send(`<error><message>${oversizedFile.originalname} exceeds the configured file size limit</message></error>`);
+      }
+    }
+
+    const emailQuestion = questions.find(q => q.question_type === "email") || questions.find(q => q.name === "email_address");
+    const emailAddress = emailQuestion ? payload[emailQuestion.name] || "" : payload.email_address || req.user.email || "";
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [rResult] = await connection.execute(
       "INSERT INTO responses (survey_id, cognito_user_id, email_address) VALUES (?, ?, ?)",
       [surveyId, cognitoUserId, emailAddress]
     );
     const responseId = rResult.insertId;
+    const responsePayload = {
+      response_id: responseId,
+      email_address: emailAddress,
+      certificates: [],
+      date_responded: new Date().toISOString().slice(0, 19).replace("T", " ")
+    };
 
-    // 2. Map standard text field answers to their question ids dynamically
-    const textQuestions = [
-      { name: 'full_name', value: fullName },
-      { name: 'email_address', value: emailAddress },
-      { name: 'description', value: description },
-      { name: 'gender', value: gender },
-      { name: 'programming_stack', value: programmingStack }
-    ];
+    for (const question of questions) {
+      if (question.question_type === "file") continue;
 
-    for (const item of textQuestions) {
-      const [qRows] = await db.execute(
-        "SELECT id, question_type FROM questions WHERE survey_id = ? AND name = ?", 
-        [surveyId, item.name]
-      );
-      if (qRows.length > 0) {
-        const qId = qRows[0].id;
-        
-        if (qRows[0].question_type === 'choice') {
-          const [ansResult] = await db.execute(
-            "INSERT INTO answers (response_id, question_id) VALUES (?, ?)",
-            [responseId, qId]
+      const value = payload[question.name];
+      if (value === undefined || value === "") continue;
+
+      if (question.question_type === "choice") {
+        const selectedChoices = normalizeAnswerValues(value);
+        const [ansResult] = await connection.execute(
+          "INSERT INTO answers (response_id, question_id) VALUES (?, ?)",
+          [responseId, question.id]
+        );
+        const answerId = ansResult.insertId;
+
+        for (const choiceVal of selectedChoices) {
+          const [optRows] = await connection.execute(
+            "SELECT id FROM question_options WHERE question_id = ? AND option_value = ?",
+            [question.id, choiceVal]
           );
-          const answerId = ansResult.insertId;
-          
-          // Split stack list tokens (e.g. "REACT,VUE") to link values
-          const selectedChoices = item.value.split(",").map(s => s.trim());
-          for (const choiceVal of selectedChoices) {
-            const [optRows] = await db.execute(
-              "SELECT id FROM question_options WHERE question_id = ? AND option_value = ?",
-              [qId, choiceVal]
+          if (optRows.length > 0) {
+            await connection.execute(
+              "INSERT INTO answer_options (answer_id, option_id) VALUES (?, ?)",
+              [answerId, optRows[0].id]
             );
-            if (optRows.length > 0) {
-              await db.execute(
-                "INSERT INTO answer_options (answer_id, option_id) VALUES (?, ?)",
-                [responseId, optRows[0].id]
-              );
-            }
           }
-        } else {
-          // Standard structural fields mapping text properties directly
-          await db.execute(
-            "INSERT INTO answers (response_id, question_id, answer_text) VALUES (?, ?, ?)",
-            [responseId, qId, item.value]
-          );
         }
+        responsePayload[question.name] = selectedChoices.join(",");
+      } else {
+        await connection.execute(
+          "INSERT INTO answers (response_id, question_id, answer_text) VALUES (?, ?, ?)",
+          [responseId, question.id, value]
+        );
+        responsePayload[question.name] = value;
       }
     }
 
-    // 3. Process certificates files via intercepted multi-part arrays
-    const certificatesList = [];
     if (req.files && req.files.length > 0) {
-      const [fileQ] = await db.execute(
-        "SELECT id FROM questions WHERE survey_id = ? AND question_type = 'file' LIMIT 1",
-        [surveyId]
-      );
-      
-      if (fileQ.length > 0) {
-        const fileQuestionId = fileQ[0].id;
-        const [ansFileResult] = await db.execute(
+      if (fileQuestion) {
+        const [ansFileResult] = await connection.execute(
           "INSERT INTO answers (response_id, question_id) VALUES (?, ?)",
-          [responseId, fileQuestionId]
+          [responseId, fileQuestion.id]
         );
         const fileAnswerId = ansFileResult.insertId;
 
@@ -99,32 +129,25 @@ exports.submitResponse = async (req, res) => {
             ContentType: file.mimetype
           }));
 
-          await db.execute(
+          await connection.execute(
             "INSERT INTO certificates (answer_id, file_name, s3_key) VALUES (?, ?, ?)",
             [fileAnswerId, file.originalname, s3Key]
           );
 
-          certificatesList.push({ certificate: file.originalname });
+          responsePayload.certificates.push({ certificate: file.originalname });
         }
       }
     }
 
-    // Format structural mock return XML body to client engine interface
-    const responsePayload = {
-      question_response: {
-        full_name: fullName,
-        email_address: emailAddress,
-        description: description,
-        gender: gender,
-        programming_stack: programmingStack,
-        certificates: certificatesList,
-        date_responded: new Date().toISOString().slice(0, 19).replace('T', ' ')
-      }
-    };
+    await connection.commit();
 
-    return res.status(201).header("Content-Type", "application/xml").send(jstoxml.toXML(responsePayload, { header: true }));
+    return res.status(201).header("Content-Type", "application/xml")
+      .send(jstoxml.toXML({ question_response: responsePayload }, { header: true }));
   } catch (error) {
+    if (connection) await connection.rollback();
     return res.status(500).header("Content-Type", "application/xml").send(`<error><message>${error.message}</message></error>`);
+  } finally {
+    if (connection) connection.release();
   }
 };
 
@@ -158,10 +181,14 @@ exports.getSurveyResponses = async (req, res) => {
 
     for (const r of respRows) {
       const [ansRows] = await db.query(
-        `SELECT q.name, q.question_type, a.id as answer_id, a.answer_text 
+        `SELECT q.name, q.question_type, a.id as answer_id, a.answer_text,
+          GROUP_CONCAT(qo.option_value ORDER BY qo.id SEPARATOR ',') AS selected_options
          FROM answers a 
          JOIN questions q ON a.question_id = q.id 
-         WHERE a.response_id = ?`, [r.id]
+         LEFT JOIN answer_options ao ON ao.answer_id = a.id
+         LEFT JOIN question_options qo ON qo.id = ao.option_id
+         WHERE a.response_id = ?
+         GROUP BY q.name, q.question_type, a.id, a.answer_text`, [r.id]
       );
 
       const responseNode = {
@@ -180,6 +207,8 @@ exports.getSurveyResponses = async (req, res) => {
             _attrs: { id: c.id },
             _content: c.file_name
           }));
+        } else if (ans.question_type === "choice") {
+          responseNode[ans.name] = ans.selected_options || "";
         } else if (ans.name) {
           responseNode[ans.name] = ans.answer_text || "";
         }

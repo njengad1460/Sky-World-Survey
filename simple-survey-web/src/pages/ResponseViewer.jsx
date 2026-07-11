@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { xmlToJson } from '../utils/xmlParser';
+import { fetchAuthSession } from 'aws-amplify/auth';
 
 export default function ResponseViewer() {
   const { surveyId } = useParams();
@@ -39,10 +40,16 @@ export default function ResponseViewer() {
     fetchResponses();
   }, [fetchResponses]);
 
-  const handleDownload = (certId) => {
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-    // Direct link handles browser hand-off to presigned redirection endpoint
-    window.open(`${apiBase}/certificates/${certId}`, '_blank');
+  const handleDownload = async (certId) => {
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.accessToken?.toString();
+      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+      window.open(`${apiBase}/certificates/${certId}?token=${token}`, '_blank');
+    } catch (err) {
+      console.error('Failed to get auth token for download:', err);
+      alert('Authentication error. Please log in again.');
+    }
   };
 
   return (

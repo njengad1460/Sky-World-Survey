@@ -1,12 +1,25 @@
-import { parseStringPromise } from 'xml2js';
+import { XMLParser } from 'fast-xml-parser';
 
 export const xmlToJson = async (xmlString) => {
   try {
-    const parsed = await parseStringPromise(xmlString, {
-      explicitArray: false,
-      mergeAttrs: true,
-      explicitRoot: false
+    const parser = new XMLParser({
+      ignoreDeclaration: true,
+      ignoreAttributes: false,
+      attributeNamePrefix: "",
+      textNodeName: "_",
+      parseAttributeValue: false,
+      parseTagValue: false
     });
+    
+    let parsed = parser.parse(xmlString);
+    if (parsed) {
+      const keys = Object.keys(parsed);
+      if (keys.length === 1 && typeof parsed[keys[0]] === 'object') {
+        parsed = parsed[keys[0]];
+      } else if (keys.length === 1 && parsed[keys[0]] === "") {
+        parsed = {};
+      }
+    }
     return parsed;
   } catch (error) {
     console.error('XML parsing failure:', error);

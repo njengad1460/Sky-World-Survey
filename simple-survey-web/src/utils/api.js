@@ -3,6 +3,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  timeout: 30000,
   headers: {
     'Accept': 'application/xml',
   }
@@ -22,7 +23,7 @@ api.interceptors.request.use(async (config) => {
 
   // Handle standard Content-Type configuration safety overrides
   if (config.data instanceof FormData) {
-    config.headers['Content-Type'] = 'multipart/form-data';
+    delete config.headers['Content-Type']; // Let Axios set the boundary automatically
   } else if (config.data) {
     config.headers['Content-Type'] = 'application/xml';
   }
