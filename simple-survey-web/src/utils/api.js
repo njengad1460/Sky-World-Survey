@@ -17,7 +17,7 @@ api.interceptors.request.use(async (config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
   } catch (err) {
-    console.warn('User not authenticated, proceeding with anonymous request traits.');
+    console.warn('User not authenticated, proceeding with anonymous request traits.', err.message);
   }
 
   // Handle standard Content-Type configuration safety overrides

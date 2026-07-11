@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../utils/api';
 import { xmlToJson } from '../utils/xmlParser';
 import Stepper from '../components/SurveyForm/Stepper';
@@ -9,11 +9,7 @@ export default function SurveyList() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchActiveSurveys();
-  }, []);
-
-  const fetchActiveSurveys = async () => {
+  const fetchActiveSurveys = useCallback(async () => {
     try {
       const res = await api.get('/surveys');
       const data = await xmlToJson(res.data);
@@ -25,7 +21,11 @@ export default function SurveyList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchActiveSurveys();
+  }, [fetchActiveSurveys]);
 
   const handleSelectSurvey = async (survey) => {
     setLoading(true);
