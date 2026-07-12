@@ -38,7 +38,10 @@ export default function StepField({ question, value, onChange }) {
 
         {type === 'email' && (
           <input 
-            type="email" 
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             className="form-input"
             value={value || ''} 
             onChange={(e) => onChange(e.target.value)} 

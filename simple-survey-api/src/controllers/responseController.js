@@ -32,9 +32,17 @@ exports.submitResponse = async (req, res) => {
         .send("<error><message>No questions configured for this survey</message></error>");
     }
 
+    const getPayloadValue = (question) => {
+      if (payload[question.name] !== undefined) return payload[question.name];
+      const idKey = String(question.id);
+      if (payload[idKey] !== undefined) return payload[idKey];
+      return undefined;
+    };
+
     for (const question of questions) {
       const hasFiles = question.question_type === "file" && req.files?.length > 0;
-      const hasValue = payload[question.name] !== undefined && payload[question.name] !== "";
+      const value = getPayloadValue(question);
+      const hasValue = value !== undefined && value !== "";
 
       if (question.is_required && !hasValue && !hasFiles) {
         return res.status(400).header("Content-Type", "application/xml")
@@ -78,7 +86,7 @@ exports.submitResponse = async (req, res) => {
     for (const question of questions) {
       if (question.question_type === "file") continue;
 
-      const value = payload[question.name];
+      const value = getPayloadValue(question);
       if (value === undefined || value === "") continue;
 
       if (question.question_type === "choice") {

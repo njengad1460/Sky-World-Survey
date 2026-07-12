@@ -196,17 +196,32 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-container">
-      <h2>Administrative Controls</h2>
+      <div className="admin-header">
+        <div>
+          <p className="eyebrow">Administrative Controls</p>
+          <h2>Survey Management Center</h2>
+          <p className="panel-description">Create surveys, manage questions, and review response details from one unified dashboard.</p>
+        </div>
+      </div>
+
       {message && <div className="status-banner">{message}</div>}
-      <form onSubmit={handleCreate} className="creation-form">
-        <h3>{editingSurveyId ? 'Edit Survey' : 'Deploy New Dynamic Survey Layout'}</h3>
-        <input 
-          type="text" 
-          placeholder="Survey Name" 
-          value={name} 
-          onChange={e => setName(e.target.value)} 
-          required 
-        />
+
+      <section className="admin-panel admin-summary">
+        <div className="panel-header">
+          <div>
+            <h3>{editingSurveyId ? 'Edit Survey' : 'Deploy New Dynamic Survey Layout'}</h3>
+            <p className="panel-description">Use this form to create a new survey or update an existing campaign. Surveys appear below once deployed.</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleCreate} className="creation-form">
+          <input 
+            type="text" 
+            placeholder="Survey Name" 
+            value={name} 
+            onChange={e => setName(e.target.value)} 
+            required 
+          />
         <textarea 
           placeholder="Survey Description Mapping Meta" 
           value={description} 
@@ -225,10 +240,17 @@ export default function AdminDashboard() {
           )}
         </div>
       </form>
+      </section>
 
-      <div className="management-table">
-        <h3>Active Metrics Trackers</h3>
-        <table>
+      <section className="admin-panel">
+        <div className="panel-header">
+          <div>
+            <h3>Active Metrics Trackers</h3>
+            <p className="panel-description">Review your current surveys, navigate directly to their questions, or inspect submitted responses.</p>
+          </div>
+        </div>
+        <div className="management-table">
+          <table>
           <thead>
             <tr>
               <th>ID</th>
@@ -241,37 +263,44 @@ export default function AdminDashboard() {
               <tr key={s.id}>
                 <td>{s.id}</td>
                 <td><strong>{s.name}</strong></td>
-                <td>
-                  <button
-                    onClick={() => loadQuestions(s)}
-                    className="btn-secondary"
-                  >
-                    Manage Questions
-                  </button>
-                  <button
-                    onClick={() => handleEditSurvey(s)}
-                    className="btn-secondary"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSurvey(s.id)}
-                    className="btn-danger"
-                  >
-                    Delete
-                  </button>
-                  <button 
-                    onClick={() => navigate(`/admin/responses/${s.id}`)} 
-                    className="btn-primary"
-                  >
-                    View Responses
-                  </button>
+                <td className="operations-cell">
+                  <div className="action-group">
+                    <button
+                      type="button"
+                      onClick={() => loadQuestions(s)}
+                      className="btn-secondary"
+                    >
+                      Manage Questions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEditSurvey(s)}
+                      className="btn-secondary"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSurvey(s.id)}
+                      className="btn-danger"
+                    >
+                      Delete
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => navigate(`/admin/responses/${s.id}`)} 
+                      className="btn-primary"
+                    >
+                      View Responses
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      </section>
 
       {selectedSurvey && (
         <div className="question-manager">
@@ -362,9 +391,11 @@ export default function AdminDashboard() {
                     <td>{question.name}</td>
                     <td>{question.type}</td>
                     <td>{question.required}</td>
-                    <td>
-                      <button className="btn-secondary" onClick={() => setQuestionForm(questionToForm(question))}>Edit</button>
-                      <button className="btn-danger" onClick={() => handleDeleteQuestion(question.id)}>Delete</button>
+                    <td className="operations-cell">
+                      <div className="action-group">
+                        <button type="button" className="btn-secondary" onClick={() => setQuestionForm(questionToForm(question))}>Edit</button>
+                        <button type="button" className="btn-danger" onClick={() => handleDeleteQuestion(question.id)}>Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

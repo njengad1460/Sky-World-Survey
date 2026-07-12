@@ -7,7 +7,7 @@ import AdminGate from './components/AdminGate';
 import { Amplify } from 'aws-amplify';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
-import { Authenticator } from '@aws-amplify/ui-react';
+import { Authenticator, ThemeProvider } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import { isAdminSession } from './utils/adminAuth';
 
@@ -45,6 +45,12 @@ function Navigation() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const clearActiveSurvey = () => {
+    sessionStorage.removeItem('survey_active');
+    sessionStorage.removeItem('survey_answers');
+    sessionStorage.removeItem('survey_step');
+  };
+
   const checkAuth = () => {
     fetchAuthSession().then(session => {
       setIsLoggedIn(!!session.tokens?.accessToken);
@@ -71,11 +77,11 @@ function Navigation() {
 
   return (
     <nav className="navbar">
-      <Link to="/" style={{ textDecoration: 'none' }}>
+      <Link to="/" style={{ textDecoration: 'none' }} onClick={clearActiveSurvey}>
         <div className="nav-brand">Sky Survey Platform</div>
       </Link>
       <div className="nav-links">
-        <Link to="/">Available Surveys</Link>
+        <Link to="/" onClick={clearActiveSurvey}>Available Surveys</Link>
         {isAdmin && <Link to="/admin">Manage Surveys</Link>}
         {isLoggedIn ? (
           <Link to="/login">My Account</Link>
@@ -98,30 +104,36 @@ function App() {
             <Route path="/" element={<SurveyList />} />
             
             <Route path="/login" element={
-              <Authenticator>
-                {({ signOut, user }) => (
-                  <AccountDashboard signOut={signOut} user={user} />
-                )}
-              </Authenticator>
+              <ThemeProvider colorMode="dark">
+                <Authenticator>
+                  {({ signOut, user }) => (
+                    <AccountDashboard signOut={signOut} user={user} />
+                  )}
+                </Authenticator>
+              </ThemeProvider>
             } />
 
             <Route path="/admin" element={
-              <Authenticator>
-                {({ signOut, user }) => (
-                  <AdminGate signOut={signOut} user={user} loginId={user?.signInDetails?.loginId || 'Admin'}>
-                    <AdminDashboard />
-                  </AdminGate>
-                )}
-              </Authenticator>
+              <ThemeProvider colorMode="dark">
+                <Authenticator>
+                  {({ signOut, user }) => (
+                    <AdminGate signOut={signOut} user={user} loginId={user?.signInDetails?.loginId || 'Admin'}>
+                      <AdminDashboard />
+                    </AdminGate>
+                  )}
+                </Authenticator>
+              </ThemeProvider>
             } />
             <Route path="/admin/responses/:surveyId" element={
-              <Authenticator>
-                {({ signOut, user }) => (
-                  <AdminGate signOut={signOut} user={user} loginId={user?.signInDetails?.loginId || 'Admin'}>
-                    <ResponseViewer />
-                  </AdminGate>
-                )}
-              </Authenticator>
+              <ThemeProvider colorMode="dark">
+                <Authenticator>
+                  {({ signOut, user }) => (
+                    <AdminGate signOut={signOut} user={user} loginId={user?.signInDetails?.loginId || 'Admin'}>
+                      <ResponseViewer />
+                    </AdminGate>
+                  )}
+                </Authenticator>
+              </ThemeProvider>
             } />
           </Routes>
         </main>

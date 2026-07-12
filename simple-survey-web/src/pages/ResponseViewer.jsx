@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { xmlToJson } from '../utils/xmlParser';
@@ -52,6 +52,52 @@ export default function ResponseViewer() {
     }
   };
 
+  const columns = useMemo(() => {
+    const defaultKeys = ['response_id', 'email_address', 'date_responded'];
+    const keys = new Set(defaultKeys);
+    responses.forEach((response) => {
+      Object.keys(response).forEach((key) => keys.add(key));
+    });
+    return Array.from(keys);
+  }, [responses]);
+
+  const formatHeader = (key) => {
+    if (key === 'response_id') return 'ID';
+    if (key === 'email_address') return 'Applicant Email';
+    if (key === 'date_responded') return 'Submitted At';
+    return key.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const renderCell = (value) => {
+    if (value === undefined || value === null || value === '') {
+      return 'N/A';
+    }
+
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) {
+        return value.join(', ');
+      }
+      if (value.certificate) {
+        const certificates = Array.isArray(value.certificate) ? value.certificate : [value.certificate];
+        return certificates.map((cert, idx) => (
+          <button
+            key={idx}
+            type="button"
+            className="btn-download"
+            onClick={() => handleDownload(cert.id)}
+          >
+            📄 {cert._ || cert}
+          </button>
+        ));
+      }
+      return JSON.stringify(value);
+    }
+
+    return String(value);
+  };
+
+  const hasResponses = responses.length > 0;
+
   return (
     <div className="viewer-container">
       <button onClick={() => navigate('/admin')} className="btn-link">← Return Dashboard</button>
@@ -67,47 +113,35 @@ export default function ResponseViewer() {
       </div>
 
       <div className="responses-table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Applicant Email</th>
-              <th>Full Name</th>
-              <th>Programming Stack</th>
-              <th>Certificates Array</th>
-              <th>Submission Frame</th>
-            </tr>
-          </thead>
-          <tbody>
-            {responses.map((r, i) => (
-              <tr key={i}>
-                <td>{r.response_id}</td>
-                <td>{r.email_address}</td>
-                <td>{r.full_name || 'N/A'}</td>
-                <td>{r.programming_stack || 'N/A'}</td>
-                <td>
-                  {r.certificates?.certificate ? (
-                    (Array.isArray(r.certificates.certificate) ? r.certificates.certificate : [r.certificates.certificate]).map((c, idx) => (
-                      <button 
-                        key={idx} 
-                        onClick={() => handleDownload(c.id)} 
-                        className="btn-download"
-                      >
-                        📄 {c._ || c}
-                      </button>
-                    ))
-                  ) : 'No files'}
-                </td>
-                <td>{r.date_responded}</td>
+        {hasResponses ? (
+          <table>
+            <thead>
+              <tr>
+                {columns.map((column) => (
+                  <th key={column}>{formatHeader(column)}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {responses.map((response, rowIndex) => (
+                <tr key={rowIndex}>
+                  {columns.map((column) => (
+                    <td key={column}>{renderCell(response[column])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty-state">
+            <p>No responses matched your filter yet. Try a different email or return later once submissions arrive.</p>
+          </div>
+        )}
       </div>
 
-      <div className="pagination-controls">
+      <div className="pagination-controls response-pagination">
         <button disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</button>
-        <span>Page {page} of {paginationInfo.last_page} ({paginationInfo.total_count} records)</span>
+        <span>Page {page} of {paginationInfo.last_page} · {paginationInfo.total_count} records</span>
         <button disabled={page >= paginationInfo.last_page} onClick={() => setPage(p => p + 1)}>Next</button>
       </div>
     </div>

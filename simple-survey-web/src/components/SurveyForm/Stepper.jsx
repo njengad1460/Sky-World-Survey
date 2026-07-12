@@ -1,11 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import StepField from './StepField';
 import ReviewPage from './ReviewPage';
 
 export default function Stepper({ questions, onSubmit, submitting = false }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
+  const [currentIndex, setCurrentIndex] = useState(() => parseInt(sessionStorage.getItem('survey_step') || '0'));
+  const [answers, setAnswers] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('survey_answers')) || {};
+    } catch {
+      return {};
+    }
+  });
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    sessionStorage.setItem('survey_step', currentIndex.toString());
+  }, [currentIndex]);
+
+  useEffect(() => {
+    const safeAnswers = { ...answers };
+    for (const key in safeAnswers) {
+      if (safeAnswers[key] instanceof FileList || safeAnswers[key] instanceof File) {
+        delete safeAnswers[key];
+      }
+    }
+    sessionStorage.setItem('survey_answers', JSON.stringify(safeAnswers));
+  }, [answers]);
 
   const safeQuestions = Array.isArray(questions) ? questions : [];
   const hasQuestions = safeQuestions.length > 0;
@@ -25,14 +45,29 @@ export default function Stepper({ questions, onSubmit, submitting = false }) {
     }
 
     const currentAns = answers[currentQuestion.id];
-    
-    // Validation constraint check
+    const isBlankString = (val) => typeof val === 'string' && val.trim() === '';
+
     if (currentQuestion.required === 'yes') {
-      if (!currentAns || (Array.isArray(currentAns) && currentAns.length === 0) || (currentAns instanceof FileList && currentAns.length === 0)) {
+      if (
+        !currentAns ||
+        isBlankString(currentAns) ||
+        (Array.isArray(currentAns) && currentAns.length === 0) ||
+        (currentAns instanceof FileList && currentAns.length === 0)
+      ) {
         setError('This field is required before advancing.');
         return;
       }
     }
+
+    if (currentQuestion.type === 'email' && currentAns) {
+      const emailValue = String(currentAns).trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailValue)) {
+        setError('Please enter a valid email address.');
+        return;
+      }
+    }
+
     setError('');
     setCurrentIndex(prev => prev + 1);
   };
