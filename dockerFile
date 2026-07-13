@@ -1,0 +1,42 @@
+ARG SERVICE=api
+
+
+FROM node:24-alpine AS api-stage
+
+WORKDIR /app
+
+COPY simple-survey-api/package.json simple-survey-api/pnpm-lock.yaml ./
+
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
+
+COPY simple-survey-api/src ./src
+
+EXPOSE 3000
+
+CMD ["node", "src/app.js"]
+
+
+
+
+
+FROM node:24-alpine AS web-stage
+
+WORKDIR /app
+
+COPY simple-survey-web/package.json simple-survey-web/pnpm-lock.yaml ./
+
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
+
+COPY simple-survey-web/ ./
+
+RUN pnpm run build
+
+EXPOSE 5173
+
+CMD ["pnpm", "run", "dev"]
+
+
+FROM ${SERVICE}-stage AS final
+
+LABEL maintainer="Sky Survey Team"
+LABEL service="${SERVICE}"

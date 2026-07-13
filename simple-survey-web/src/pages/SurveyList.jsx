@@ -24,7 +24,13 @@ const getSubmissionErrorMessage = async (error) => {
 
 export default function SurveyList() {
   const [surveys, setSurveys] = useState([]);
-  const [selectedSurvey, setSelectedSurvey] = useState(null);
+  const [selectedSurvey, setSelectedSurvey] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('survey_active')) || null;
+    } catch {
+      return null;
+    }
+  });
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -57,7 +63,36 @@ export default function SurveyList() {
     });
   }, [fetchActiveSurveys]);
 
+  // Synchronize selectedSurvey with sessionStorage
+  useEffect(() => {
+    if (selectedSurvey) {
+      sessionStorage.setItem('survey_active', JSON.stringify(selectedSurvey));
+      
+      // Auto-fetch questions if they are missing (e.g., after a page reload or login redirect)
+      if (questions.length === 0) {
+        setLoading(true);
+        api.get(`/surveys/${selectedSurvey.id}/questions`)
+          .then(async res => {
+            const data = await xmlToJson(res.data);
+            if (data && data.question) {
+              setQuestions(Array.isArray(data.question) ? data.question : [data.question]);
+            }
+          })
+          .catch(err => console.error('Error fetching questions for restored survey:', err))
+          .finally(() => setLoading(false));
+      }
+    } else {
+      sessionStorage.removeItem('survey_active');
+      sessionStorage.removeItem('survey_answers');
+      sessionStorage.removeItem('survey_step');
+    }
+  }, [selectedSurvey]);
+
   const handleSelectSurvey = async (survey) => {
+    // Clear out any old draft answers from a previous survey when explicitly starting a new one
+    sessionStorage.removeItem('survey_answers');
+    sessionStorage.removeItem('survey_step');
+    
     setLoading(true);
     setSubmitStatus('idle');
     setSubmitMessage('');
@@ -88,15 +123,19 @@ export default function SurveyList() {
       questions.forEach((q) => {
         const val = formAnswers[q.id];
         if (!val) return;
+        const fieldId = q.id?.toString();
 
         if (q.type === 'file') {
           Array.from(val).forEach((file) => {
             formData.append('certificates', file);
           });
         } else if (Array.isArray(val)) {
-          formData.append(q.name, val.join(','));
+          const joined = val.join(',');
+          formData.append(q.name, joined);
+          if (fieldId) formData.append(fieldId, joined);
         } else {
           formData.append(q.name, val);
+          if (fieldId) formData.append(fieldId, val);
         }
       });
 
@@ -117,16 +156,29 @@ export default function SurveyList() {
   return (
     <div className="page-wrapper">
       {!selectedSurvey ? (
-        <div className="survey-grid">
-          <h2>Open Deployments & Screenings</h2>
-          {surveys.length === 0 ? <p>No surveys available.</p> : surveys.map(s => (
-            <div key={s.id} className="survey-card">
-              <h3>{s.name}</h3>
-              <p>{s.description}</p>
-              <button onClick={() => handleSelectSurvey(s)} className="btn-primary">Start Survey</button>
+        <>
+          <section className="hero-section">
+            <div className="hero-copy">
+              <p className="eyebrow">Available Surveys</p>
+              <h2>Open Deployments & Screenings</h2>
+              <p className="hero-description">
+                Discover the latest surveys ready for participant responses. All active opportunities are listed here so you can begin quickly and securely.
+              </p>
             </div>
-          ))}
-        </div>
+          </section>
+
+          <div className="survey-grid">
+            {surveys.length === 0 ? <p>No surveys available.</p> : surveys.map(s => (
+              <div key={s.id} className="survey-card">
+                <div>
+                  <h3>{s.name}</h3>
+                  <p>{s.description}</p>
+                </div>
+                <button onClick={() => handleSelectSurvey(s)} className="btn-primary">Start Survey</button>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <div className="active-form-wrapper">
           <button onClick={() => { setSelectedSurvey(null); setSubmitStatus('idle'); }} className="btn-link">← Return to Surveys</button>

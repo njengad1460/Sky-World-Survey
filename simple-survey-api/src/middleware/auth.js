@@ -8,6 +8,17 @@ const getAllowedAdminGroups = () => {
 };
 
 const checkAuth = async (req, res, next) => {
+  // In development mode without Cognito, skip auth
+  if (process.env.NODE_ENV === 'development' && !jwtVerifier) {
+    req.user = {
+      id: 'dev-user',
+      username: 'developer',
+      email: 'dev@example.com',
+      groups: ['Admin', 'admin']
+    };
+    return next();
+  }
+
   try {
     const authHeader = req.headers.authorization || req.headers.Authorization;
     let token;

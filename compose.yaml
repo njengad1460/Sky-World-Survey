@@ -1,0 +1,74 @@
+services:
+  # MySQL Database Service
+  database:
+    image: mysql:8.0
+    container_name: sky-survey-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_USER: ${DB_USER:-survey_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-survey_password}
+      MYSQL_DATABASE: ${DB_NAME:-sky_survey_db}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init/sql_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - sky-network
+
+  # Node.js API Service
+  api:
+    build:
+      context: .
+      dockerfile: dockerFile
+      args:
+        SERVICE: api
+    container_name: sky-survey-api
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      DB_HOST: database
+      DB_USER: ${DB_USER:-survey_user}
+      DB_PASSWORD: ${DB_PASSWORD:-survey_password}
+      DB_NAME: ${DB_NAME:-sky_survey_db}
+      DB_PORT: 3306
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./.env:/app/.env:ro
+    networks:
+      - sky-network
+    restart: unless-stopped
+
+  # React Web Service
+  web:
+    build:
+      context: .
+      dockerfile: dockerFile
+      args:
+        SERVICE: web
+    container_name: sky-survey-web
+    depends_on:
+      - api
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://api:3000/api}
+    ports:
+      - "5173:5173"
+    networks:
+      - sky-network
+    restart: unless-stopped
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  sky-network:
+    driver: bridge

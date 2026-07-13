@@ -18,7 +18,12 @@ api.interceptors.request.use(async (config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
   } catch (err) {
-    console.warn('User not authenticated, proceeding with anonymous request traits.', err.message);
+    // In development mode without Cognito, this is expected
+    if (import.meta.env.MODE !== 'production') {
+      console.log('No authentication session available (development mode)');
+    } else {
+      console.warn('User not authenticated, proceeding with anonymous request traits.', err.message);
+    }
   }
 
   // Handle standard Content-Type configuration safety overrides
