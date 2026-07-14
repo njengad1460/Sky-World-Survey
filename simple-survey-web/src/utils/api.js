@@ -1,8 +1,22 @@
 import axios from 'axios';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
+// Resolve API base URL with a browser-friendly fallback.
+// When running the frontend in the host browser, the Docker-internal hostname
+// `api` is not resolvable. Prefer a host-mapped address (`localhost`) if needed.
+const configuredBase = import.meta.env.VITE_API_BASE_URL;
+let resolvedBase = configuredBase || 'http://localhost:5000/api';
+try {
+  if (typeof window !== 'undefined' && resolvedBase.includes('://api')) {
+    // Replace the docker network hostname with localhost so browser requests succeed
+    resolvedBase = resolvedBase.replace('://api', '://localhost');
+  }
+} catch {
+  // noop for non-browser environments
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: resolvedBase,
   timeout: 30000,
   headers: {
     'Accept': 'application/xml',
