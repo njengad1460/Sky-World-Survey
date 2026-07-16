@@ -1,0 +1,120 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "staging" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+          
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: |
+            simple-survey-web/pnpm-lock.yaml
+            simple-survey-api/pnpm-lock.yaml
+          
+      - name: Lint Frontend
+        run: |
+          cd simple-survey-web
+          pnpm install
+          pnpm run lint
+
+      - name: Lint Backend
+        run: |
+          cd simple-survey-api
+          pnpm install
+          # The API doesn't have a lint script by default, so we'll check if it exists before running it
+          if jq -e '.scripts.lint' package.json > /dev/null; then pnpm run lint; else echo "No lint script found"; fi
+
+  docker-build-and-push:
+    name: Build & Push to ECR
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: af-south-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./dockerFile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            SERVICE=api
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/sky-survey-api:latest, ${{ steps.login-ecr.outputs.registry }}/sky-survey-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./dockerFile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+             SERVICE=web
+             VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+             VITE_COGNITO_USER_POOL_ID=${{ secrets.VITE_COGNITO_USER_POOL_ID }}
+             VITE_COGNITO_CLIENT_ID=${{ secrets.VITE_COGNITO_CLIENT_ID }}
+             VITE_ADMIN_GROUP_NAMES=${{ secrets.VITE_ADMIN_GROUP_NAMES }}
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/sky-survey-web:latest, ${{ steps.login-ecr.outputs.registry }}/sky-survey-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+  # invalidate-cloudfront:
+  #   name: Invalidate CloudFront
+  #   needs: docker-build-and-push
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: af-south-1
+
+  #     - name: Invalidate CloudFront
+  #       env:
+  #         DIST_ID: ${{ secrets.DIST_ID }}
+  #       run: |
+  #         if [ -z "$DIST_ID" ]; then
+  #           echo "Error: DIST_ID secret is not set"
+  #           exit 1
+  #         fi
+  #         aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
