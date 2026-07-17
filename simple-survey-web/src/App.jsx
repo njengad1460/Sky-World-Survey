@@ -53,7 +53,7 @@ function Navigation() {
 
   const checkAuth = () => {
     fetchAuthSession().then(session => {
-      setIsLoggedIn(!!session.tokens?.accessToken);
+      setIsLoggedIn(!!session.tokens?.idToken);
       setIsAdmin(isAdminSession(session));
     }).catch(() => {
       setIsLoggedIn(false);

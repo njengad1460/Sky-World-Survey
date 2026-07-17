@@ -17,7 +17,7 @@ let jwtVerifier = null;
 if (process.env.COGNITO_USER_POOL_ID && process.env.COGNITO_CLIENT_ID) {
   jwtVerifier = CognitoJwtVerifier.create({
     userPoolId: process.env.COGNITO_USER_POOL_ID,
-    tokenUse: "access",
+    tokenUse: "id",
     clientId: process.env.COGNITO_CLIENT_ID,
   });
 }

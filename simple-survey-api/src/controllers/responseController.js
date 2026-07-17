@@ -65,8 +65,8 @@ exports.submitResponse = async (req, res) => {
       }
     }
 
-    const emailQuestion = questions.find(q => q.question_type === "email") || questions.find(q => q.name === "email_address");
-    const emailAddress = emailQuestion ? payload[emailQuestion.name] || "" : payload.email_address || req.user.email || "";
+    // Always use the authenticated user's registration email from the JWT token
+    const emailAddress = req.user.email || "";
 
     connection = await db.getConnection();
     await connection.beginTransaction();

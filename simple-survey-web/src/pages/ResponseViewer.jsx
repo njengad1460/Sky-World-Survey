@@ -43,7 +43,7 @@ export default function ResponseViewer() {
   const handleDownload = async (certId) => {
     try {
       const session = await fetchAuthSession();
-      const token = session.tokens?.accessToken?.toString();
+      const token = session.tokens?.idToken?.toString();
       const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
       window.open(`${apiBase}/certificates/${certId}?token=${token}`, '_blank');
     } catch (err) {

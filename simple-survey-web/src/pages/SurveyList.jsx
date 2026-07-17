@@ -57,7 +57,7 @@ export default function SurveyList() {
     
     // Check if the user is authenticated to determine if they can submit
     fetchAuthSession().then(session => {
-      setIsLoggedIn(!!session.tokens?.accessToken);
+      setIsLoggedIn(!!session.tokens?.idToken);
     }).catch(() => {
       setIsLoggedIn(false);
     });
