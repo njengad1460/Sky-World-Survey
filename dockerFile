@@ -1,6 +1,7 @@
 ARG SERVICE=api
 
 
+# ─── API Stage ───────────────────────────────────────────────────────────────
 FROM node:24-alpine AS api-stage
 
 WORKDIR /app
@@ -16,12 +17,21 @@ EXPOSE 3000
 CMD ["node", "src/app.js"]
 
 
-
-
-
-FROM node:24-alpine AS web-stage
+# ─── Web Build Stage (compile Vite app) ──────────────────────────────────────
+FROM node:24-alpine AS web-build
 
 WORKDIR /app
+
+# Declare build args so Vite embeds them at compile time
+ARG VITE_API_BASE_URL
+ARG VITE_COGNITO_USER_POOL_ID
+ARG VITE_COGNITO_CLIENT_ID
+ARG VITE_ADMIN_GROUP_NAMES
+
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_COGNITO_USER_POOL_ID=$VITE_COGNITO_USER_POOL_ID
+ENV VITE_COGNITO_CLIENT_ID=$VITE_COGNITO_CLIENT_ID
+ENV VITE_ADMIN_GROUP_NAMES=$VITE_ADMIN_GROUP_NAMES
 
 COPY simple-survey-web/package.json simple-survey-web/pnpm-lock.yaml ./
 
@@ -31,12 +41,19 @@ COPY simple-survey-web/ ./
 
 RUN pnpm run build
 
-EXPOSE 5173
 
-CMD ["pnpm", "run", "dev"]
+# ─── Web Serve Stage (nginx static — no dev server in production) ─────────────
+FROM nginx:alpine AS web-stage
 
+COPY --from=web-build /app/dist /usr/share/nginx/html
 
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+
+# ─── Final (picks api-stage or web-stage based on SERVICE build arg) ──────────
 FROM ${SERVICE}-stage AS final
 
+ARG SERVICE
 LABEL maintainer="Sky Survey Team"
 LABEL service="${SERVICE}"
