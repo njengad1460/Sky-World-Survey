@@ -96,25 +96,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           
-  # invalidate-cloudfront:
-  #   name: Invalidate CloudFront
-  #   needs: docker-build-and-push
-  #   if: github.ref == 'refs/heads/main'
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Configure AWS credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: af-south-1
+  invalidate-cloudfront:
+    name: Invalidate CloudFront
+    needs: docker-build-and-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: af-south-1
 
-  #     - name: Invalidate CloudFront
-  #       env:
-  #         DIST_ID: ${{ secrets.DIST_ID }}
-  #       run: |
-  #         if [ -z "$DIST_ID" ]; then
-  #           echo "Error: DIST_ID secret is not set"
-  #           exit 1
-  #         fi
-  #         aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+      - name: Invalidate CloudFront
+        env:
+          DIST_ID: ${{ secrets.DIST_ID }}
+        run: |
+          if [ -z "$DIST_ID" ]; then
+            echo "Error: DIST_ID secret is not set"
+            exit 1
+          fi
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
