@@ -4,13 +4,20 @@ const { CognitoJwtVerifier } = require("aws-jwt-verify");
 // Note: Environment variables come from Docker compose or process.env
 // No need to call dotenv.config() in Docker containers
 
-const s3Client = new S3Client({
+const s3Config = {
   region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
+};
+
+// Only explicitly set credentials if they are provided in the environment.
+// Otherwise, allow the AWS SDK to automatically use the EC2 IAM Instance Profile.
+if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+  s3Config.credentials = {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  };
+}
+
+const s3Client = new S3Client(s3Config);
 
 // Only initialize JWT verifier if Cognito credentials are provided
 let jwtVerifier = null;
