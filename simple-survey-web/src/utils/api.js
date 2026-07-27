@@ -5,15 +5,26 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 // When running the frontend in the host browser, the Docker-internal hostname
 // `api` is not resolvable. Prefer a host-mapped address (`localhost`) if needed.
 const configuredBase = import.meta.env.VITE_API_BASE_URL;
-let resolvedBase = configuredBase || 'http://localhost:5000/api';
-try {
-  if (typeof window !== 'undefined' && resolvedBase.includes('://api')) {
+let resolvedBase = configuredBase;
+
+if (typeof window !== 'undefined') {
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  if (!resolvedBase || (!isLocalhost && resolvedBase.includes('localhost'))) {
+    // We are deployed but the API base URL is missing or pointing to localhost.
+    // Use the relative path which relies on the reverse proxy (Nginx).
+    resolvedBase = '/api';
+  } else if (resolvedBase.includes('://api')) {
     // Replace the docker network hostname with localhost so browser requests succeed
     resolvedBase = resolvedBase.replace('://api', '://localhost');
   }
-} catch {
-  // noop for non-browser environments
 }
+
+if (!resolvedBase) {
+  resolvedBase = 'http://localhost:5000/api';
+}
+
+export const API_BASE_URL = resolvedBase;
 
 const api = axios.create({
   baseURL: resolvedBase,

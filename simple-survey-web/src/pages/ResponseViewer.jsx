@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { API_BASE_URL } from '../utils/api';
 import { xmlToJson } from '../utils/xmlParser';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
@@ -44,8 +44,7 @@ export default function ResponseViewer() {
     try {
       const session = await fetchAuthSession();
       const token = session.tokens?.idToken?.toString();
-      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-      window.open(`${apiBase}/certificates/${certId}?token=${token}`, '_blank');
+      window.open(`${API_BASE_URL}/certificates/${certId}?token=${token}`, '_blank');
     } catch (err) {
       console.error('Failed to get auth token for download:', err);
       alert('Authentication error. Please log in again.');
