@@ -10,13 +10,18 @@ let resolvedBase = configuredBase;
 if (typeof window !== 'undefined') {
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   
-  if (!resolvedBase || (!isLocalhost && resolvedBase.includes('localhost'))) {
-    // We are deployed but the API base URL is missing or pointing to localhost.
-    // Use the relative path which relies on the reverse proxy (Nginx).
-    resolvedBase = '/api';
-  } else if (resolvedBase.includes('://api')) {
-    // Replace the docker network hostname with localhost so browser requests succeed
-    resolvedBase = resolvedBase.replace('://api', '://localhost');
+  if (!isLocalhost) {
+    // On production/EC2, if the URL is missing, points to localhost, or points to the internal Docker 'api' host,
+    // we must use the relative path so the Nginx reverse proxy can correctly route it.
+    if (!resolvedBase || resolvedBase.includes('localhost') || resolvedBase.includes('://api')) {
+      resolvedBase = '/api';
+    }
+  } else {
+    // On local development, if the URL points to the internal Docker 'api' host,
+    // replace it with localhost so the host browser can reach it.
+    if (resolvedBase && resolvedBase.includes('://api')) {
+      resolvedBase = resolvedBase.replace('://api', '://localhost');
+    }
   }
 }
 
