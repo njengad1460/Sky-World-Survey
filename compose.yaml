@@ -54,13 +54,17 @@ services:
       dockerfile: dockerFile
       args:
         SERVICE: web
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://api:3000/api}
+        VITE_COGNITO_USER_POOL_ID: ${VITE_COGNITO_USER_POOL_ID}
+        VITE_COGNITO_CLIENT_ID: ${VITE_COGNITO_CLIENT_ID}
+        VITE_ADMIN_GROUP_NAMES: ${VITE_ADMIN_GROUP_NAMES:-admin,Admin,Admins}
     container_name: sky-survey-web
     depends_on:
       - api
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://api:3000/api}
     ports:
-      - "5173:5173"
+      - "5173:80"
     networks:
       - sky-network
     restart: unless-stopped
