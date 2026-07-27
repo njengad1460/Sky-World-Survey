@@ -131,7 +131,7 @@ exports.submitResponse = async (req, res) => {
           const s3Key = `certificates/${Date.now()}_${file.originalname.replace(/\s+/g, '_')}`;
           
           await s3Client.send(new PutObjectCommand({
-            Bucket: process.env.AWS_S3_BUCKET_NAME,
+            Bucket: process.env.AWS_S3_BUCKET_NAME || process.env.S3_BUCKET_NAME,
             Key: s3Key,
             Body: file.buffer,
             ContentType: file.mimetype
@@ -256,7 +256,7 @@ exports.downloadCertificate = async (req, res) => {
 
     // Generate localized 15-minute secure transient presigned download URL
     const command = new GetObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Bucket: process.env.AWS_S3_BUCKET_NAME || process.env.S3_BUCKET_NAME,
       Key: certificate.s3_key,
       ResponseContentDisposition: `attachment; filename="${certificate.file_name}"`
     });
